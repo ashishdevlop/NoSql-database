@@ -1,154 +1,195 @@
 const express = require("express");
+const PORT = 3000;
 const cors = require("cors");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv").config();
-const Stripe = require("stripe");
 
 const app = express();
+
+const db=require("./config/mongoose");
 app.use(cors());
+// app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: "10mb" }));
-
-const PORT = process.env.PORT || 8080;
-// mongodb collection
-console.log(process.env.MONGODB_URL);
-mongoose.set("strictQuery", false);
-mongoose
-  .connect(process.env.MONGODB_URL)
-  .then(() => console.log("connect to database"))
-  .catch((err) => console.log(err));
-
-//schema
-const userSchema = mongoose.Schema({
-  firstName: String,
-  lastName: String,
-  email: {
-    type: String,
-    unique: true,
-  },
-  password: String,
-  confirmPassword: String,
-  image: String,
-});
-
-//model
-const userModel = mongoose.model("user", userSchema);
-//api
-app.get("/", (req, res) => {
-  res.send("server is running");
-});
-// sign up
-app.post("/signup", async (req, res) => {
-  // console.log(req.body);
-  const { email } = req.body;
-
-  userModel.findOne({ email: email }, (err, result) => {
-    // console.log(result);
-    console.log(err);
-    if (result) {
-      res.send({ message: " Email id is already register", alert: false });
-    } else {
-      const data = userModel(req.body);
-      const save = data.save();
-      res.send({ message: "Successfully sign up", alert: true });
-    }
-  });
-});
-
-//api login
-app.post("/login", (req, res) => {
-  // console.log(req.body);
-  const { email } = req.body;
-  userModel.findOne({ email: email }, (err, result) => {
-    if (result) {
-      const dataSend = {
-        _id: result._id,
-        firstName: result.firstName,
-        lastName: result.lastName,
-        email: result.email,
-        image: result.image,
-      };
-      console.log(dataSend);
-      res.send({
-        message: "login is sucessfully",
-        alert: true,
-        data: dataSend,
-      });
-    } else {
-      res.send({
-        message: " Email is not available, Please sign up",
-        alert: false,
-      });
-    }
-  });
-});
-
-//product section
-
-const schemaProduct = mongoose.Schema({
-  name: String,
-  category: String,
-  image: String,
-  price: String,
-  description: String,
-});
-const productModel = mongoose.model("product", schemaProduct);
-
-//save product in data
-//api
-app.post("/uploadProduct", async (req, res) => {
-  // console.log(req.body);
-  const data = await productModel(req.body);
-  const datasave = await data.save();
-  res.send({ message: "Upload Successfully" });
-});
-
-//
-app.get("/product", async (req, res) => {
-  const data = await productModel.find({});
-  res.send(JSON.stringify(data));
-});
-
-////////
-console.log(process.env.STRIPE_SECRET_KEY);
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-app.post("/checkout-payment", async (req, res) => {
-  console.log(req.body);
+const Customer =require("./models/customers");
+const Order = require("./models/orders");
+const Store = require("./models/stores");
+const OrderItem = require("./models/order_item");
+const Categories= require("./models/categories");
+const Product= require("./models/products");
+const Stock= require("./models/stocks");
+const Brand= require("./models/brands");
+// API endpoints
+// Customer API
+app.get("/customers", async (req, res) => {
   try {
-    const params = {
-      submit_type: "pay",
-      mode: "payment",
-      payment_method_types: ["card"],
-      billing_address_collection: "auto",
-      shipping_options: [{ shipping_rate: "shr_1NFFZCSI9oYz4EygTSu6Hpi3" }],
-
-      line_items: req.body.map((item) => {
-        return {
-          price_data: {
-            currency: "inr",
-            product_data: {
-              name: item.name,
-              // images: [item.image],
-            },
-            unit_amount: item.price * 100,
-          },
-          adjustable_quantity: {
-            enabled: true,
-            minimum: 1,
-          },
-          quantity: item.qty,
-        };
-      }),
-      success_url: `${process.env.FRONTEND_URL}/success`,
-      cancel_url: `${process.env.FRONTEND_URL}/cancel`,
-    };
-    const session = await stripe.checkout.sessions.create(params);
-    console.log(session);
-    res.status(200).json(session.id);
-  } catch (err) {
-    res.status(err.statusCode || 500).json(err.message);
+    const customers = await Customer.find({});
+    res.json(customers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-  // res.send({ message: "payment gateway", success: true });
 });
-//server running
-app.listen(PORT, () => console.log("server is running at port:" + PORT));
+
+app.post("/customers", async (req, res) => {
+  try {
+    const customerData = req.body;
+    const newCustomer = new Customer(customerData);
+    await newCustomer.save();
+    res.status(201).json({ message: "Customer data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Order API
+app.get("/orders", async (req, res) => {
+  try {
+    const orders = await Order.find({});
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/orders", async (req, res) => {
+  try {
+    const orderData = req.body;
+    const newOrder = new Order(orderData);
+    await newOrder.save();
+    res.status(201).json({ message: "Order data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Store API
+app.get("/stores", async (req, res) => {
+  try {
+    const stores = await Store.find({});
+    res.json(stores);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/stores", async (req, res) => {
+  try {
+    const storeData = req.body;
+    const newStore = new Store(storeData);
+    await newStore.save();
+    res.status(201).json({ message: "Store data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Order Item API
+app.get("/orderitems", async (req, res) => {
+  try {
+    const orderItems = await OrderItem.find({});
+    res.json(orderItems);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/orderitems", async (req, res) => {
+  try {
+    const orderItemData = req.body;
+    const newOrderItem = new OrderItem(orderItemData);
+    await newOrderItem.save();
+    res.status(201).json({ message: "Order item data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// API endpoints
+// Get all categories
+app.get("/categories", async (req, res) => {
+  try {
+    const categories = await Category.find({});
+    res.json(categories);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add a new category
+app.post("/categories", async (req, res) => {
+  try {
+    const categoriesData = req.body;
+    const newCategories = new Categories(categoriesData);
+    await newCategories.save();
+    res.status(201).json({ message: "Categories data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET all products
+app.get("/products", async (req, res) => {
+  try {
+    const products = await Product.find({});
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST a new product
+app.post("/products", async (req, res) => {
+  try {
+    const productData = req.body;
+    const newProduct = new Product(productData);
+    await newProduct.save();
+    res.status(201).json({ message: "Product data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET all stocks
+app.get("/stocks", async (req, res) => {
+  try {
+    const stocks = await Stock.find({});
+    res.json(stocks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST a new stock
+app.post("/stocks", async (req, res) => {
+  try {
+    const stockData = req.body;
+    const newStock = new Stock(stockData);
+    await newStock.save();
+    res.status(201).json({ message: "Stock data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// GET all brands
+app.get("/brands", async (req, res) => {
+  try {
+    const brands = await Brand.find({});
+    res.json(brands);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST a new brand
+app.post("/brands", async (req, res) => {
+  try {
+    const brandData = req.body;
+    const newBrand = new Brand(brandData);
+    await newBrand.save();
+    res.status(201).json({ message: "Brand data saved successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// Server running
+app.listen(PORT, () => console.log(`Server is running at port: ${PORT}`));
